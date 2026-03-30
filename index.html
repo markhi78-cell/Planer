@@ -32,21 +32,59 @@
         window.state = { projects: [], companies: [] };
         window.activeProjectId = null;
 
-        // 1. DATEN AUS CLOUD LADEN (Echtzeit-Sync)
+    // 1. DATEN AUS CLOUD LADEN (Sicherheits-Check inklusive)
         onValue(dbRef, (snapshot) => {
             const data = snapshot.val();
-            if (data) {
-                window.state = data;
-                renderSidebar();
-                if (window.activeProjectId) {
-                    renderTasks();
-                } else if (!document.getElementById('view-companies').classList.contains('hidden')) {
-                    renderCompanies();
-                }
+            
+            // Sicherstellen, dass state immer die richtige Struktur hat
+            window.state = {
+                projects: (data && data.projects) ? data.projects : [],
+                companies: (data && data.companies) ? data.companies : []
+            };
+
+            // Jedes Projekt braucht zwingend ein Aufgaben-Array, sonst kracht es bei .forEach
+            window.state.projects.forEach(p => {
+                if (!p.tasks) p.tasks = [];
+            });
+
+            renderSidebar();
+            
+            if (window.activeProjectId) {
+                renderTasks();
+            } else if (!document.getElementById('view-companies').classList.contains('hidden')) {
+                renderCompanies();
             }
-            document.getElementById('sync-status').innerHTML = '<span class="flex items-center gap-1 text-green-600"><i data-lucide="cloud-check" class="w-3 h-3"></i> Synchronisiert</span>';
+            
+            document.getElementById('sync-status').innerHTML = '<span class="text-green-600 font-bold">✓ Verbunden & Synchron</span>';
             lucide.createIcons();
+        }, (error) => {
+            document.getElementById('sync-status').innerHTML = '<span class="text-red-500">⚠ Fehler: ' + error.message + '</span>';
         });
+
+        // 2. FUNKTIONEN MIT SICHERHEITS-CHECK
+        window.addTask = () => {
+            const p = window.state.projects.find(p => p.id === window.activeProjectId);
+            if (p) {
+                if (!p.tasks) p.tasks = []; // Falls noch keine Aufgaben da sind, Liste erstellen
+                p.tasks.push({ id: Date.now(), task: '', date: '', companyId: '', contactId: '', status: 'Offen' });
+                window.saveToCloud();
+            }
+        };
+
+        window.addCompany = () => {
+            if (!window.state.companies) window.state.companies = [];
+            window.state.companies.push({ id: Date.now(), name: 'Neue Firma', contacts: [] });
+            window.saveToCloud();
+        };
+
+        window.addContact = (compId) => {
+            const c = window.state.companies.find(c => c.id === compId);
+            if (c) {
+                if (!c.contacts) c.contacts = [];
+                c.contacts.push({ id: Date.now(), name: '', phone: '', email: '' });
+                window.saveToCloud();
+            }
+        };
 
         // 2. DATEN IN CLOUD SPEICHERN
         window.saveToCloud = function() {
