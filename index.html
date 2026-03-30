@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baustellen-Manager Mobil Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #fbfbfa; color: #37352f; overflow: hidden; }
+        
+        /* Mobile Sidebar Toggle */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                z-index: 100;
+                left: -260px;
+                transition: left 0.3s ease;
+                height: 100%;
+            }
+            .sidebar.open { left: 0; shadow: 10px 0 15px rgba(0,0,0,0.1); }
+            .content-container { padding: 20px 15px !important; }
+            h1 { font-size: 1.5rem !important; }
+        }
+
+        .editable:focus { outline: none; background: #f1f1f0; border-radius: 2px; }
+        select, input { background: transparent; border: none; font-size: 14px; outline: none; }
+        .active-nav { background-color: #ebebeb; font-weight: 500; }
+        
+        /* Custom Scrollbar for Notion Look */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-thumb { background: #e3e2e0; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex h-screen w-full">
+
+    <!-- MOBILE OVERLAY -->
+    <div id="overlay" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/20 z-[90]"></div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar w-[260px] bg-[#f7f7f5] border-right border-[#edece9] flex flex-col shrink-0">
+        <div class="p-4 font-semibold flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="hard-hat" class="w-5 h-5 text-orange-600"></i>
+                <span>Planer Pro</span>
+            </div>
+            <button onclick="toggleSidebar()" class="md:hidden p-1 text-gray-400">
+                <i data-lucide="chevrons-left" class="w-5 h-5"></i>
+            </button>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto px-2 space-y-6">
+            <div>
+                <div class="text-[11px] font-bold text-gray-400 uppercase px-2 mb-2 tracking-wider">Projekte</div>
+                <ul id="projectList" class="space-y-1"></ul>
+                <button onclick="addNewProject()" class="w-full text-left px-2 py-1.5 mt-2 text-gray-500 hover:bg-[#ebebeb] rounded flex items-center gap-2 text-sm transition-colors">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Projekt hinzufügen
+                </button>
+            </div>
+
+            <div>
+                <div class="text-[11px] font-bold text-gray-400 uppercase px-2 mb-2 tracking-wider">Verwaltung</div>
+                <button onclick="showCompanies()" id="nav-companies" class="w-full text-left px-2 py-1.5 text-gray-600 hover:bg-[#ebebeb] rounded flex items-center gap-2 text-sm transition-colors">
+                    <i data-lucide="users" class="w-4 h-4"></i> Firmen & Kontakte
+                </button>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 flex flex-col min-w-0 bg-white">
+        <!-- Header -->
+        <header class="h-12 border-b border-gray-100 flex items-center justify-between px-4 bg-white/80 shrink-0">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="p-1 hover:bg-gray-100 rounded">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+                <div id="breadcrumb" class="text-sm truncate max-w-[200px] md:max-w-none text-gray-500">
+                    <span id="nav-current">Dashboard</span>
+                </div>
+            </div>
+            <button onclick="exportData()" class="p-2 text-gray-400 hover:text-black">
+                <i data-lucide="download" class="w-4 h-4"></i>
+            </button>
+        </header>
+
+        <!-- CONTENT AREA -->
+        <div id="mainView" class="flex-1 overflow-y-auto overflow-x-hidden">
+            
+            <!-- PROJEKT ANSICHT -->
+            <div id="view-project" class="hidden content-container max-w-6xl mx-auto py-10 px-6 md:px-10">
+                <h1 id="mainTitle" class="text-3xl md:text-4xl font-bold mb-8 outline-none" contenteditable="true" onblur="updateProjectName(this)">Projektname</h1>
+                
+                <div class="overflow-x-auto pb-4">
+                    <table class="w-full text-left border-collapse min-w-[700px]">
+                        <thead>
+                            <tr class="text-[11px] text-gray-400 border-b border-gray-100 uppercase">
+                                <th class="py-3 px-2 w-1/3">Aufgabe</th>
+                                <th class="py-3 px-2">Firma / Kontakt</th>
+                                <th class="py-3 px-2 w-32">Status</th>
+                                <th class="w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="taskTableBody"></tbody>
+                    </table>
+                </div>
+                <button onclick="addTask()" class="mt-6 bg-[#2383e2] text-white px-4 py-1.5 rounded text-sm flex items-center gap-2 hover:bg-blue-600 transition-colors shadow-sm">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Neue Zeile
+                </button>
+            </div>
+
+            <!-- FIRMEN ANSICHT -->
+            <div id="view-companies" class="hidden content-container max-w-4xl mx-auto py-10 px-6 md:px-10">
+                <h1 class="text-3xl font-bold mb-8">Firmen-Stammdaten</h1>
+                <div id="companyList" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm"></div>
+                <button onclick="addCompany()" class="mt-8 border border-gray-200 px-4 py-2 rounded text-sm flex items-center gap-2 hover:bg-gray-50">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Neue Firma anlegen
+                </button>
+            </div>
+
+            <!-- EMPTY STATE -->
+            <div id="emptyState" class="h-full flex flex-col items-center justify-center text-gray-300">
+                <i data-lucide="arrow-left" class="w-12 h-12 mb-4 animate-pulse"></i>
+                <p>Wähle ein Projekt aus der Liste</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // DATEN
+        let projects = JSON.parse(localStorage.getItem('bp_v4_projects')) || [];
+        let companies = JSON.parse(localStorage.getItem('bp_v4_companies')) || [];
+        let activeProjectId = null;
+
+        function init() {
+            renderSidebar();
+            lucide.createIcons();
+        }
+
+        // SIDEBAR TOGGLE (MOBILE)
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const ov = document.getElementById('overlay');
+            sb.classList.toggle('open');
+            ov.classList.toggle('hidden');
+        }
+
+        // NAVIGATION
+        function showProject(id) {
+            activeProjectId = id;
+            document.getElementById('view-project').classList.remove('hidden');
+            document.getElementById('view-companies').classList.add('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            const project = projects.find(p => p.id === id);
+            document.getElementById('nav-current').innerText = project.name;
+            document.getElementById('mainTitle').innerText = project.name;
+            if(window.innerWidth < 768) toggleSidebar();
+            renderTasks();
+            renderSidebar();
+        }
+
+        function showCompanies() {
+            activeProjectId = null;
+            document.getElementById('view-project').classList.add('hidden');
+            document.getElementById('view-companies').classList.remove('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('nav-current').innerText = "Stammdaten";
+            if(window.innerWidth < 768) toggleSidebar();
+            renderCompanies();
+            renderSidebar();
+        }
+
+        // FIRMEN & KONTAKTE
+        function renderCompanies() {
+            const container = document.getElementById('companyList');
+            container.innerHTML = '';
+            companies.forEach(c => {
+                const div = document.createElement('div');
+                div.className = "p-4 border border-gray-100 rounded-xl bg-white shadow-sm hover:border-blue-200 transition-all";
+                div.innerHTML = `
+                    <div class="flex justify-between mb-3">
+                        <input class="font-bold text-base w-full" value="${c.name}" onblur="updateCompany(${c.id}, this.value)">
+                        <button onclick="deleteCompany(${c.id})" class="text-gray-300 hover:text-red-400"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="contacts-${c.id}" class="space-y-3">
+                        ${c.contacts.map(con => `
+                            <div class="bg-gray-50 p-2 rounded-lg text-xs">
+                                <input class="w-full font-semibold mb-1 bg-transparent" value="${con.name}" onblur="updateContact(${c.id}, ${con.id}, 'name', this.value)" placeholder="Name">
+                                <div class="flex items-center gap-2 text-blue-600 mb-1">
+                                    <i data-lucide="phone" class="w-3 h-3"></i>
+                                    <input class="w-full bg-transparent" value="${con.phone}" onblur="updateContact(${c.id}, ${con.id}, 'phone', this.value)" placeholder="Telefon">
+                                </div>
+                                <div class="flex items-center gap-2 text-gray-500">
+                                    <i data-lucide="mail" class="w-3 h-3"></i>
+                                    <input class="w-full bg-transparent" value="${con.email || ''}" onblur="updateContact(${c.id}, ${con.id}, 'email', this.value)" placeholder="E-Mail">
+                                </div>
+                                <button onclick="deleteContact(${c.id}, ${con.id})" class="mt-2 text-red-300 hover:text-red-500">Kontakt entfernen</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button onclick="addContact(${c.id})" class="text-xs font-medium text-blue-600 mt-3 flex items-center gap-1 hover:underline">
+                        <i data-lucide="plus-circle" class="w-3 h-3"></i> Kontakt hinzufügen
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        // TASKS
+        function renderTasks() {
+            const project = projects.find(p => p.id === activeProjectId);
+            const tbody = document.getElementById('taskTableBody');
+            tbody.innerHTML = '';
+
+            project.tasks.forEach(t => {
+                const selectedCompany = companies.find(c => c.id == t.companyId);
+                const selectedContact = selectedCompany?.contacts.find(con => con.id == t.contactId);
+
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-50 group hover:bg-gray-50/50";
+                tr.innerHTML = `
+                    <td class="py-4 px-2">
+                        <div class="editable text-sm font-medium" contenteditable="true" onblur="updateTask(${t.id}, 'task', this.innerText)">${t.task}</div>
+                        <input type="date" value="${t.date}" onchange="updateTask(${t.id}, 'date', this.value)" class="text-[10px] text-gray-400 mt-1 block">
+                    </td>
+                    <td class="py-4 px-2">
+                        <select onchange="updateTask(${t.id}, 'companyId', this.value); renderTasks();" class="text-xs block mb-1 w-full max-w-[150px] font-semibold">
+                            <option value="">-- Firma wählen --</option>
+                            ${companies.map(c => `<option value="${c.id}" ${t.companyId == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                        </select>
+                        <div class="flex items-center gap-2">
+                            <select onchange="updateTask(${t.id}, 'contactId', this.value); renderTasks();" class="text-xs text-gray-600">
+                                <option value="">-- Kontakt wählen --</option>
+                                ${selectedCompany ? selectedCompany.contacts.map(con => `<option value="${con.id}" ${t.contactId == con.id ? 'selected' : ''}>${con.name}</option>`).join('') : ''}
+                            </select>
+                            ${selectedContact ? `
+                                <div class="flex gap-2 ml-2">
+                                    <a href="tel:${selectedContact.phone}" class="p-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100">
+                                        <i data-lucide="phone" class="w-3 h-3"></i>
+                                    </a>
+                                    ${selectedContact.email ? `
+                                        <a href="mailto:${selectedContact.email}" class="p-1.5 bg-green-50 text-green-600 rounded-full hover:bg-green-100">
+                                            <i data-lucide="mail" class="w-3 h-3"></i>
+                                        </a>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </td>
+                    <td class="py-4 px-2">
+                        <select onchange="updateTask(${t.id}, 'status', this.value)" class="text-[10px] font-bold uppercase ${t.status === 'Erledigt' ? 'bg-green-100 text-green-700' : 'bg-gray-100'} rounded px-2 py-1">
+                            <option ${t.status === 'Offen' ? 'selected' : ''}>Offen</option>
+                            <option ${t.status === 'In Arbeit' ? 'selected' : ''}>In Arbeit</option>
+                            <option ${t.status === 'Erledigt' ? 'selected' : ''}>Erledigt</option>
+                        </select>
+                    </td>
+                    <td class="py-4 text-right">
+                        <button onclick="deleteTask(${t.id})" class="text-gray-200 hover:text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        // HILFSFUNKTIONEN (CRUD)
+        function addCompany() { companies.push({ id: Date.now(), name: 'Neue Firma', contacts: [] }); save(); renderCompanies(); }
+        function updateCompany(id, val) { companies.find(c => c.id === id).name = val; save(); }
+        function addContact(compId) { companies.find(c => c.id === compId).contacts.push({ id: Date.now(), name: '', phone: '', email: '' }); save(); renderCompanies(); }
+        function updateContact(compId, conId, field, val) { companies.find(c => c.id === compId).contacts.find(con => con.id === conId)[field] = val; save(); }
+        function deleteCompany(id) { if(confirm('Firma löschen?')) { companies = companies.filter(c => c.id !== id); save(); renderCompanies(); }}
+        function deleteContact(compId, conId) { companies.find(c => c.id === compId).contacts = companies.find(c => c.id === compId).contacts.filter(con => con.id !== conId); save(); renderCompanies(); }
+
+        function addNewProject() { const id = Date.now(); projects.push({ id, name: 'Neues Projekt', tasks: [] }); save(); showProject(id); }
+        function updateProjectName(el) { projects.find(p => p.id === activeProjectId).name = el.innerText; save(); renderSidebar(); }
+        function addTask() { projects.find(p => p.id === activeProjectId).tasks.push({ id: Date.now(), task: '', date: '', companyId: '', contactId: '', status: 'Offen' }); save(); renderTasks(); }
+        function updateTask(taskId, field, val) { 
+            const t = projects.find(p => p.id === activeProjectId).tasks.find(t => t.id === taskId);
+            t[field] = val; 
+            if(field === 'companyId') t.contactId = '';
+            save(); 
+        }
+        function deleteTask(id) { projects.find(p => p.id === activeProjectId).tasks = projects.find(p => p.id === activeProjectId).tasks.filter(t => t.id !== id); save(); renderTasks(); }
+
+        function renderSidebar() {
+            const list = document.getElementById('projectList');
+            list.innerHTML = '';
+            projects.forEach(p => {
+                const li = document.createElement('li');
+                li.className = `px-2 py-2 rounded cursor-pointer truncate text-sm ${activeProjectId === p.id ? 'active-nav' : 'hover:bg-[#ebebeb] text-gray-600'}`;
+                li.onclick = () => showProject(p.id);
+                li.innerHTML = `<div class="flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> ${p.name}</div>`;
+                list.appendChild(li);
+            });
+            document.getElementById('nav-companies').classList.toggle('active-nav', !activeProjectId && !document.getElementById('view-companies').classList.contains('hidden'));
+            lucide.createIcons();
+        }
+
+        function save() {
+            localStorage.setItem('bp_v4_projects', JSON.stringify(projects));
+            localStorage.setItem('bp_v4_companies', JSON.stringify(companies));
+        }
+
+        function exportData() {
+            const data = { projects, companies };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", `baustellen_backup_${new Date().toISOString().split('T')[0]}.json`);
+            dl.click();
+        }
+
+        init();
+    </script>
+</body>
+</html>
